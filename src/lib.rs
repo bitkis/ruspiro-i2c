@@ -4,7 +4,7 @@
  * Author: André Borrmann
  * License: Apache License 2.0
  **********************************************************************************************************************/
-#![doc(html_root_url = "https://docs.rs/ruspiro-i2c/0.3.0")]
+#![doc(html_root_url = "https://docs.rs/ruspiro-i2c/0.3.1")]
 #![cfg_attr(not(any(test, doctest)), no_std)]
 
 //! # Raspberry Pi I²C bus interface
@@ -44,7 +44,7 @@
 //! # }
 //! ```
 //! Once done simple use the funtions to write to or read from the device registers as required.
-//! 
+//!
 //! # Features
 //!
 //! - ``ruspiro_pi3`` is active by default and ensures the proper MMIO base address is used for Raspberry Pi 3

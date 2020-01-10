@@ -17,7 +17,7 @@ use the ``ruspiro-allocator`` with this crate.
 To use the crate just add the following dependency to your ``Cargo.toml`` file:
 ```toml
 [dependencies]
-ruspiro-i2c = "0.3"
+ruspiro-i2c = { version = "0.3", features = ["ruspiro_pi3"]
 ```
 
 Once done the access to the I²C bus interface is available in your rust files like so:

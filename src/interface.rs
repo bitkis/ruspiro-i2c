@@ -29,8 +29,12 @@ pub(crate) fn initialize(core_speed: u32, fast_mode: bool) -> I2cResult<()> {
     // when I2C is about to be initialized reserve GPIO Pins 2 and 3
     // as the I2C bus pins with alt function 0
     GPIO.take_for(|gpio| {
-        gpio.get_pin(2).map(|pin| pin.to_alt_f0())?;
-        gpio.get_pin(3).map(|pin| pin.to_alt_f0())?;
+        gpio.get_pin(2)
+            .map(|pin| pin.into_alt_f0())
+            .map_err(|_| "GPIO error")?;
+        gpio.get_pin(3)
+            .map(|pin| pin.into_alt_f0())
+            .map_err(|_| "GPIO error")?;
         Ok(())
     })?;
     // both pin's configured, now setup the I2C speed and we are done
@@ -135,7 +139,7 @@ pub(crate) fn read_reg_data(addr: u8, reg: u8, buffer: &mut [u8]) -> I2cResult<u
     //let mut data: Vec<u8> = Vec::with_capacity(count as usize);
     let chunks = buffer.len() / I2C_MAX_BYTES;
     let mut remainder = buffer.len();
-    for c in 0..chunks + 1 {
+    for c in 0..=chunks {
         let start = c * I2C_MAX_BYTES;
         let size = if remainder > I2C_MAX_BYTES {
             I2C_MAX_BYTES
@@ -209,7 +213,7 @@ pub(crate) fn write_reg_data(addr: u8, reg: u8, data: &[u8]) -> I2cResult<()> {
         I2C_REG_C::ENABLE::SET | I2C_REG_C::STARTTRANS::SET | I2C_REG_C::READWRITE::WRITE,
     );
     let chunks = data_len / I2C_MAX_BYTES;
-    for chunk in 0..chunks + 1 {
+    for chunk in 0..=chunks {
         let idx = chunk * data_len;
         let len = if data_len > I2C_MAX_BYTES {
             I2C_MAX_BYTES
@@ -264,119 +268,129 @@ fn read_fifo(buffer: &mut [u8]) -> usize {
     } else {
         buffer.len()
     };
-    for i in 0..num {
+    for b in &mut *buffer {
         while I2C_REG_S::Register.read(I2C_REG_S::RX_DATA) == 0 {}
-        buffer[i] = (I2C_REG_FIFO::Register.get() & 0xFF) as u8;
+        *b = (I2C_REG_FIFO::Register.get() & 0xFF) as u8;
     }
     num
 }
 
 /// Write a data buffer to the FIFO
 fn write_fifo(data: &[u8]) {
-    for i in 0..data.len() {
+    for d in &*data {
         while I2C_REG_S::Register.read(I2C_REG_S::TX_DATA) == 0 {}
-        I2C_REG_FIFO::Register.set(data[i] as u32);
+        I2C_REG_FIFO::Register.set(*d as u32);
     }
 }
 
 // I2C register definitions
 define_mmio_register!(
-    // control register
-    I2C_REG_C<ReadWrite<u32>@(I2C_BASE + 0x00)> {
-        // I²C bus enabled flag
+    /// control register
+    I2C_REG_C<ReadWrite<u32>@(I2C_BASE)> {
+        /// I²C bus enabled flag
         ENABLE     OFFSET(15) [
-            SET: 1,
-            CLEAR: 0
+            SET = 1,
+            CLEAR = 0
         ],
-        // Receive interrupt flag
+        /// Receive interrupt flag
         IRQ_RX     OFFSET(10) [
-            SET: 1,
-            CLEAR: 0
+            SET = 1,
+            CLEAR = 0
         ],
-        // Transmit interrupt flag
+        /// Transmit interrupt flag
         IRQ_TX     OFFSET(9) [
-            SET: 1,
-            CLEAR: 0
+            SET = 1,
+            CLEAR = 0
         ],
-        // Done interrupt flag
+        /// Done interrupt flag
         IRQ_DONE   OFFSET(8) [
-            SET: 1,
-            CLEAR: 0
+            SET = 1,
+            CLEAR = 0
         ],
-        // Start transfer flag
+        /// Start transfer flag
         STARTTRANS OFFSET(7) [
-            SET: 1,
-            CLEAR: 0
+            SET = 1,
+            CLEAR = 0
         ],
-        // clear fifo buffer
+        /// clear fifo buffer
         FIFO_CLR  OFFSET(4) [
-            CLEAR: 1,
-            KEEP: 0
+            CLEAR = 1,
+            KEEP = 0
         ],
-        // Read / 0 Write operation
+        /// Read / 0 Write operation
         READWRITE  OFFSET(0) [
-            READ: 1,
-            WRITE: 0
+            READ = 1,
+            WRITE = 0
         ]
     }
 );
 
 define_mmio_register!(
-    // status register
+    /// status register
     I2C_REG_S<ReadWrite<u32>@(I2C_BASE + 0x04)> {
+        /// 1 Slave has held the SCL signal longer than allowed high
         CLK_TIMEOUT  OFFSET(9) [
-            SET: 1,
-            CLEAR: 0
-        ], // 1 Slave has held the SCL signal longer than allowed high
+            SET = 1,
+            CLEAR = 0
+        ],
+        /// 1 Slave address acknowledge error
         ACK_ERROR    OFFSET(8) [
-            SET: 1,
-            CLEAR: 0
-        ], // 1 Slave address acknowledge error
+            SET = 1,
+            CLEAR = 0
+        ],
+        /// 1 FIFO is full
         RX_FULL      OFFSET(7) [
-            SET: 1,
-            CLEAR: 0
-        ], // 1 FIFO is full
+            SET = 1,
+            CLEAR = 0
+        ],
+        /// 1 FIFO is empty
         TX_EMPTY     OFFSET(6) [
-            SET: 1,
-            CLEAR: 0
-        ], // 1 FIFO is empty
+            SET = 1,
+            CLEAR = 0
+        ],
+        /// 1 FIFO contains at least one byte
         RX_DATA      OFFSET(5) [
-            SET: 1,
-            CLEAR: 0
-        ], // 1 FIFO contains at least one byte
+            SET = 1,
+            CLEAR = 0
+        ],
+        /// 1 FIFO can accept data
         TX_DATA      OFFSET(4) [
-            SET: 1,
-            CLEAR: 0
-        ], // 1 FIFO can accept data
+            SET = 1,
+            CLEAR = 0
+        ],
+        /// 1 FIFO is full and needs reading from the FIFO
         RX_NEEDREAD  OFFSET(3) [
-            SET: 1,
-            CLEAR: 0
-        ], // 1 FIFO is full and needs reading from the FIFO
+            SET = 1,
+            CLEAR = 0
+        ],
+        /// 1 FIFO is less than full and needs writing to the FIFO
         TX_NEEDWRITE OFFSET(2) [
-            SET: 1,
-            CLEAR: 0
-        ], // 1 FIFO is less than full and needs writing to the FIFO
+            SET = 1,
+            CLEAR = 0
+        ],
+        /// 1 if transfer is complete
         TRANS_DONE   OFFSET(1) [
-            SET: 1,
-            CLEAR: 0
-        ], // 1 if transfer is complete
+            SET = 1,
+            CLEAR = 0
+        ],
+        /// 1 if transfer is active
         TRANS_ACTIVE OFFSET(0) [
-            SET: 1,
-            CLEAR: 0
-        ]  // 1 if transfer is active
+            SET = 1,
+            CLEAR = 0
+        ]
     },
-    // data len register
+    /// data len register
     I2C_REG_DLEN<ReadWrite<u32>@(I2C_BASE + 0x08)> {
         DATA OFFSET(0) BITS(16)
     },
-    // slave address register
+    /// slave address register
     I2C_REG_A<ReadWrite<u32>@(I2C_BASE + 0x0C)>,
-    // FiFo data register
+    /// FiFo data register
     I2C_REG_FIFO<ReadWrite<u32>@(I2C_BASE + 0x10)>,
-    // clock divisor 
+    /// clock divisor 
     I2C_REG_CDIV<ReadWrite<u32>@(I2C_BASE + 0x14)>,
-    // data delay
+    /// data delay
     I2C_REG_DEL<ReadWrite<u32>@(I2C_BASE + 0x18)>,
-    // clock stretch timeout
+    /// clock stretch timeout
     I2C_REG_CLKT<ReadWrite<u32>@(I2C_BASE + 0x1C)>
 );
